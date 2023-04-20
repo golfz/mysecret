@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
 	"fmt"
 	"golang.org/x/term"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
@@ -15,8 +17,8 @@ var bytes = []byte{35, 46, 57, 24, 85, 35, 24, 74, 87, 35, 88, 98, 66, 32, 14, 0
 
 const (
 	salt                = "gu&A0@5NEzr6iEWI1y31xNzeLMU!29pujTmRFCNQ#W^$x9yH&P"
-	encrypt_file_suffix = "_encrypt"
-	decrypt_file_suffix = "_decrypt"
+	encrypt_file_ext    = ".encrypted"
+	decrypt_file_suffix = ".decrypted"
 )
 
 const (
@@ -48,6 +50,7 @@ func main() {
 
 	if fileName != "" {
 		text = readFile(fileName)
+		fmt.Println("text length:", len(text))
 	}
 
 	if method == method_encrypt {
@@ -65,7 +68,7 @@ func main() {
 	}
 
 	if fileName != "" {
-		writeResultTofile(fileName, result)
+		writeResultToFile(fileName, result)
 	} else {
 		fmt.Println(result)
 	}
@@ -74,27 +77,43 @@ func main() {
 func getArgs() (text string, fileName string) {
 	args := os.Args
 
+	isFoundArgs := false
+
 	for i, arg := range args {
 		if arg == "--encrypt" || arg == "-e" {
 			method = method_encrypt
+			isFoundArgs = true
 		}
 		if arg == "--decrypt" || arg == "-d" {
 			method = method_decrypt
+			isFoundArgs = true
 		}
 		if arg == "--text" || arg == "-t" {
 			v := args[i+1]
 			text = v
+			isFoundArgs = true
 		}
 		if arg == "--file" || arg == "-f" {
 			v := args[i+1]
 			fileName = v
+			isFoundArgs = true
 		}
 		if arg == "--help" || arg == "-h" {
-			fmt.Println("usage: mysecret [--text|-t] [text] [--file|-f] [file] [--encrypt|-e] [--decrypt|-d] [--help|-h]")
-			os.Exit(0)
+			printHelp()
+			isFoundArgs = true
 		}
 	}
+
+	if !isFoundArgs {
+		printHelp()
+	}
+
 	return
+}
+
+func printHelp() {
+	fmt.Println("usage: mysecret [--text|-t] [text] [--file|-f] [file] [--encrypt|-e] [--decrypt|-d] [--help|-h]")
+	os.Exit(0)
 }
 
 func resizePasswordTo32(password string) string {
@@ -107,6 +126,19 @@ func resizePasswordTo32(password string) string {
 	return password
 }
 
+//func readFile(fileName string) string {
+//	file, err := os.Open(fileName)
+//	if err != nil {
+//		fmt.Println(err)
+//		os.Exit(1)
+//	}
+//	defer file.Close()
+//
+//	var text string
+//	fmt.Fscanln(file, &text)
+//	return text
+//}
+
 func readFile(fileName string) string {
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -115,8 +147,11 @@ func readFile(fileName string) string {
 	}
 	defer file.Close()
 
+	scanner := bufio.NewScanner(file)
 	var text string
-	fmt.Fscanln(file, &text)
+	for scanner.Scan() {
+		text += scanner.Text() + "\n"
+	}
 	return text
 }
 
@@ -164,12 +199,16 @@ func getFileNameWithoutExtension(fileName string) string {
 	return fileName[:strings.LastIndex(fileName, ".")]
 }
 
-func writeResultTofile(fileName string, text string) {
+func writeResultToFile(fileName string, text string) {
+	fileName = filepath.Base(fileName)
+
 	if method == method_encrypt {
-		fileName = getFileNameWithoutExtension(fileName) + encrypt_file_suffix + getFileExtension(fileName)
+		fileName = strings.Replace(fileName, decrypt_file_suffix, "", -1)
+		fileName = fileName + encrypt_file_ext
 	} else {
-		fileName = getFileNameWithoutExtension(fileName) + decrypt_file_suffix + getFileExtension(fileName)
+		fileName = strings.Replace(fileName, encrypt_file_ext, "", -1)
 	}
+
 	writeFile(fileName, text)
 }
 
