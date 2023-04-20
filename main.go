@@ -50,7 +50,6 @@ func main() {
 
 	if fileName != "" {
 		text = readFile(fileName)
-		fmt.Println("text length:", len(text))
 	}
 
 	if method == method_encrypt {
