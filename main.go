@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"golang.org/x/term"
@@ -13,7 +15,7 @@ import (
 	"syscall"
 )
 
-var bytes = []byte{35, 46, 57, 24, 85, 35, 24, 74, 87, 35, 88, 98, 66, 32, 14, 05}
+var ivBytes = []byte{35, 46, 57, 24, 85, 35, 24, 74, 87, 35, 88, 98, 66, 32, 14, 05}
 
 const (
 	salt                = "gu&A0@5NEzr6iEWI1y31xNzeLMU!29pujTmRFCNQ#W^$x9yH&P"
@@ -27,10 +29,11 @@ const (
 )
 
 var (
-	fileName string
-	text     string
-	password string
-	method   int
+	fileName             string
+	text                 string
+	password             string
+	method               int
+	isRemoveOriginalFile bool = false
 )
 
 func main() {
@@ -97,6 +100,10 @@ func getArgs() (text string, fileName string) {
 			fileName = v
 			isFoundArgs = true
 		}
+		if arg == "--remove" || arg == "-r" {
+			isRemoveOriginalFile = true
+			isFoundArgs = true
+		}
 		if arg == "--help" || arg == "-h" {
 			printHelp()
 			isFoundArgs = true
@@ -111,7 +118,7 @@ func getArgs() (text string, fileName string) {
 }
 
 func printHelp() {
-	fmt.Println("usage: mysecret [--text|-t] [text] [--file|-f] [file] [--encrypt|-e] [--decrypt|-d] [--help|-h]")
+	fmt.Println("usage: mysecret [--text|-t] [text] [--file|-f] [file] [--encrypt|-e] [--decrypt|-d] [--remove|-r] [--help|-h]")
 	os.Exit(0)
 }
 
@@ -124,19 +131,6 @@ func resizePasswordTo32(password string) string {
 	}
 	return password
 }
-
-//func readFile(fileName string) string {
-//	file, err := os.Open(fileName)
-//	if err != nil {
-//		fmt.Println(err)
-//		os.Exit(1)
-//	}
-//	defer file.Close()
-//
-//	var text string
-//	fmt.Fscanln(file, &text)
-//	return text
-//}
 
 func readFile(fileName string) string {
 	file, err := os.Open(fileName)
@@ -172,10 +166,19 @@ func encrypt(text string, password string) (string, error) {
 		return "", err
 	}
 	plainText := []byte(text)
-	cfb := cipher.NewCFBEncrypter(block, bytes)
+	cfb := cipher.NewCFBEncrypter(block, ivBytes)
 	cipherText := make([]byte, len(plainText))
 	cfb.XORKeyStream(cipherText, plainText)
-	return encode(cipherText), nil
+	encryptedText := encode(cipherText)
+
+	if validateFileContentWithHash(plainText, []byte(encryptedText), password) {
+		fmt.Println("Success validate file content with hash")
+	} else {
+		fmt.Println("Error: encrypted file content is not equal to original file content")
+		os.Exit(1)
+	}
+
+	return encryptedText, nil
 }
 
 func decrypt(text, password string) (string, error) {
@@ -184,10 +187,24 @@ func decrypt(text, password string) (string, error) {
 		return "", err
 	}
 	cipherText := decode(text)
-	cfb := cipher.NewCFBDecrypter(block, bytes)
+	cfb := cipher.NewCFBDecrypter(block, ivBytes)
 	plainText := make([]byte, len(cipherText))
 	cfb.XORKeyStream(plainText, cipherText)
 	return string(plainText), nil
+}
+
+func validateFileContentWithHash(originalFileContent []byte, encryptedFileContent []byte, password string) bool {
+	originalFileHash := sha256.Sum256(originalFileContent)
+
+	decryptFileContent, err := decrypt(string(encryptedFileContent), password)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	decryptedFileHash := sha256.Sum256([]byte(decryptFileContent))
+
+	return bytes.Equal(originalFileHash[:], decryptedFileHash[:])
 }
 
 func getFileExtension(fileName string) string {
@@ -199,6 +216,8 @@ func getFileNameWithoutExtension(fileName string) string {
 }
 
 func writeResultToFile(fileName string, text string) {
+	originalFileName := fileName
+
 	fileName = filepath.Base(fileName)
 
 	if method == method_encrypt {
@@ -209,6 +228,10 @@ func writeResultToFile(fileName string, text string) {
 	}
 
 	writeFile(fileName, text)
+
+	if isRemoveOriginalFile {
+		removeFile(originalFileName)
+	}
 }
 
 func writeFile(fileName string, text string) {
@@ -220,4 +243,15 @@ func writeFile(fileName string, text string) {
 	defer file.Close()
 
 	file.WriteString(text)
+
+}
+
+func removeFile(fileName string) {
+	err := os.Remove(fileName)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Println("original file was removed: " + fileName)
 }
