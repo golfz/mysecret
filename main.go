@@ -47,6 +47,8 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	fmt.Println()
+
 	password = string(bytePassword)
 	password = strings.TrimSpace(password)
 	password = resizePasswordTo32(password)
