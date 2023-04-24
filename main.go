@@ -38,20 +38,18 @@ var (
 
 func main() {
 	var result string
+	var err error = nil
+	const isEnterPasswordAgain bool = true
 
 	text, fileName = getArgs()
 
-	fmt.Print("Enter password: ")
-	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	if method == method_encrypt {
+		enterPassword(isEnterPasswordAgain)
+	} else {
+		enterPassword(!isEnterPasswordAgain)
 	}
-	fmt.Println()
 
-	password = string(bytePassword)
-	password = strings.TrimSpace(password)
-	password = resizePasswordTo32(password)
+	confirmStartProcess()
 
 	if fileName != "" {
 		text = readFile(fileName)
@@ -75,6 +73,84 @@ func main() {
 		writeResultToFile(fileName, result)
 	} else {
 		fmt.Println(result)
+	}
+}
+
+func enterPassword(isEnterPasswordAgain bool) {
+	var bytePassword1 []byte
+	var err error = nil
+
+	for {
+		fmt.Print("Enter password: ")
+		bytePassword1, err = term.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println()
+
+		if !isEnterPasswordAgain {
+			break
+
+		} else if isEnterPasswordAgain {
+			fmt.Print("Enter password again: ")
+			bytePassword2, err := term.ReadPassword(int(syscall.Stdin))
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			fmt.Println()
+
+			if bytes.Equal(bytePassword1, bytePassword2) {
+				fmt.Println("Password is matched")
+				break
+			} else {
+				fmt.Println("Passwords do not match. Try again.")
+			}
+		}
+	}
+
+	for {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("Do you want to view password? (y/n)")
+		text, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading input:", err)
+			return
+		}
+		ans := strings.ToLower(strings.TrimSpace(text))
+		if ans == "y" {
+			fmt.Println("Password: ", string(bytePassword1))
+			break
+		} else if ans == "n" {
+			break
+		} else {
+			fmt.Println("Input was not corrected, Please enter y or n")
+			continue
+		}
+	}
+
+	password = string(bytePassword1)
+	password = strings.TrimSpace(password)
+	password = resizePasswordTo32(password)
+}
+
+func confirmStartProcess() {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Do you want to start process? (y/n)")
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading input:", err)
+		return
+	}
+	ans := strings.ToLower(strings.TrimSpace(text))
+	if ans == "y" {
+		return
+	} else if ans == "n" {
+		os.Exit(0)
+	} else {
+		fmt.Println("Input was not corrected, Please enter y or n")
+		confirmStartProcess()
 	}
 }
 
@@ -174,7 +250,7 @@ func encrypt(text string, password string) (string, error) {
 	encryptedText := encode(cipherText)
 
 	if validateFileContentWithHash(plainText, []byte(encryptedText), password) {
-		fmt.Println("Success validate file content with hash")
+		fmt.Println("  > Validated original & encrypted files content with hash: OK")
 	} else {
 		fmt.Println("Error: encrypted file content is not equal to original file content")
 		os.Exit(1)
@@ -230,6 +306,7 @@ func writeResultToFile(fileName string, text string) {
 	}
 
 	writeFile(fileName, text)
+	fmt.Println("  > Write result to file: " + fileName)
 
 	if isRemoveOriginalFile {
 		removeFile(originalFileName)
@@ -255,5 +332,5 @@ func removeFile(fileName string) {
 		os.Exit(1)
 	}
 
-	fmt.Println("original file was removed: " + fileName)
+	fmt.Println("  > original file was removed: " + fileName)
 }
